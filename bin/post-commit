@@ -1,0 +1,78 @@
+#!/bin/sh
+# git-why post-commit hook.
+#
+# Runs after the commit already exists, and git ignores a post-commit exit
+# status, so nothing here can fail a commit. Every path still ends in exit 0.
+#
+# This file is POSIX sh on purpose: GUI clients (WebStorm launched from the
+# Dock) run hooks with a minimal PATH and no terminal, and the queue path must
+# work there without node.
+
+ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
+
+say() { printf 'git-why: %s\n' "$*" >&2; }
+
+if [ -n "${WHY_SKIP:-}" ]; then
+  say "skipped (WHY_SKIP)"
+  exit 0
+fi
+
+sha=$(git rev-parse --verify -q HEAD) || exit 0
+short=$(git rev-parse --short "$sha" 2>/dev/null || printf '%s' "$sha")
+
+# post-commit also fires for amends, rebase picks, cherry-picks and merge
+# commits. The reflog subject says which one this was; only fresh commits get
+# an interview. An empty subject (reflog disabled) counts as a fresh commit.
+action=$(git reflog -1 --format=%gs HEAD 2>/dev/null)
+case "$action" in
+  "commit: "* | "commit (initial): "* | "") ;;
+  *)
+    say "skipped $short (${action%%:*})"
+    exit 0
+    ;;
+esac
+
+# Spool directory: one file per queued commit, named by sha. Write-then-rename
+# so a reader never sees a half-written file, and re-queueing the same commit
+# just replaces it.
+queue() {
+  dir="${XDG_STATE_HOME:-$HOME/.local/state}/git-why/queue"
+  top=$(git rev-parse --show-toplevel) || return 1
+  mkdir -p "$dir" || return 1
+  printf '%s\n%s\n%s\n' "$top" "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$dir/$sha.$$.tmp" &&
+    mv "$dir/$sha.$$.tmp" "$dir/$sha"
+}
+
+# Git gives hooks /dev/null for stdin and sends stdout to stderr, so the
+# interview talks to the controlling terminal directly. Use its real device
+# (/dev/ttys003), not /dev/tty: claude runs on Bun, which can't watch /dev/tty
+# with kqueue on macOS and dies with EINVAL. ps reports "??" when there is no
+# controlling terminal: GUI commits, Claude Code's Bash tool, CI.
+term=$(ps -o tty= -p $$ 2>/dev/null | tr -d ' ')
+case "$term" in
+  "" | "?" | "??") term= ;;
+  /dev/*) ;;
+  *) term=/dev/$term ;;
+esac
+
+if [ -z "${WHY_FORCE_QUEUE:-}" ] && [ -n "$term" ] &&
+  (exec <"$term") 2>/dev/null &&
+  command -v node >/dev/null 2>&1 &&
+  command -v claude >/dev/null 2>&1; then
+  if node "$ROOT/src/cli.ts" hook "$sha" <"$term" >"$term" 2>&1; then
+    exit 0
+  fi
+  if queue; then
+    say "interview failed; queued $short (run: git why)"
+  else
+    say "interview failed and $short could not be queued"
+  fi
+  exit 0
+fi
+
+if queue; then
+  say "queued $short for a decision interview (run: git why)"
+else
+  say "could not queue $short"
+fi
+exit 0

@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decisions"],
+  "properties": {
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision", "why", "rejected", "tradeoff", "tags"],
+        "properties": {
+          "decision": { "type": "string" },
+          "why": { "type": ["string", "null"] },
+          "rejected": { "type": ["string", "null"] },
+          "tradeoff": { "type": ["string", "null"] },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

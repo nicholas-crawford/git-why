@@ -1,0 +1,15 @@
+#!/bin/sh
+# `git why` entry point. Installed as a symlink in ~/.local/bin, so follow the
+# link back to this repo before looking for src/.
+
+self=$0
+while [ -L "$self" ]; do
+  link=$(readlink "$self")
+  case "$link" in
+    /*) self=$link ;;
+    *) self=$(dirname "$self")/$link ;;
+  esac
+done
+ROOT=$(cd "$(dirname "$self")/.." && pwd -P)
+
+exec node "$ROOT/src/cli.ts" "$@"

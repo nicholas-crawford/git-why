@@ -1,0 +1,18 @@
+{
+  "name": "git-why",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A git post-commit hook that interviews you about your decisions and logs your answers.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2"
+  }
+}
