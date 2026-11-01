@@ -9,10 +9,16 @@
   },
   "scripts": {
     "test": "node --test",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs}": "npm run lint"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "oxlint": "^1.90.0",
     "typescript": "^7.0.2"
   }
 }
