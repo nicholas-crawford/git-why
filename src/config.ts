@@ -8,9 +8,17 @@ export interface Config {
   model: string;
   maxQuestions: number;
   ignore: string[];
+  mode: 'interview' | 'template';
+  templateDir: string
 }
 
 export const DEFAULT_CENTRAL_LOG = join(homedir(), 'Documents', 'decisions', 'decisions.md');
+
+export function parseMode(value: string | null): Config['mode'] {
+  if (value === null || value === 'interview') return 'interview';
+  if (value === 'template') return 'template';
+  throw new Error(`why.mode must be "interview" or "template", got "${value}"`);
+}
 
 /** Settings live in git config, so a repo's local value overrides the global one for free. */
 export function loadConfig(repo: string): Config {
@@ -22,6 +30,8 @@ export function loadConfig(repo: string): Config {
     model: gitConfig(repo, 'why.model') ?? 'sonnet',
     maxQuestions: maxQuestions > 0 ? maxQuestions : 5,
     ignore: gitConfigAll(repo, 'why.ignore'),
+    mode: parseMode(gitConfig(repo, 'why.mode')),
+    templateDir: gitConfig(repo, 'why.templateDir') ?? 'docs/decisions.md'
   };
 }
 
