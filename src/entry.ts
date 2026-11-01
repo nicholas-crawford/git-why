@@ -43,6 +43,7 @@ export function keptDecisions(decisions: Decision[]): Decision[] {
   return decisions.filter((d) => !blank(d.decision) && !(blank(d.why) && blank(d.rejected) && blank(d.tradeoff)));
 }
 
+
 export function formatEntry(meta: EntryMeta, decisions: Decision[]): string {
   const lines = [
     `## ${meta.date} · ${meta.repo} · ${meta.short}`,

@@ -9,7 +9,7 @@ export interface Config {
   maxQuestions: number;
   ignore: string[];
   mode: 'interview' | 'template';
-  templateDir: string
+  templateDir: string;
 }
 
 export const DEFAULT_CENTRAL_LOG = join(homedir(), 'Documents', 'decisions', 'decisions.md');
@@ -31,7 +31,7 @@ export function loadConfig(repo: string): Config {
     maxQuestions: maxQuestions > 0 ? maxQuestions : 5,
     ignore: gitConfigAll(repo, 'why.ignore'),
     mode: parseMode(gitConfig(repo, 'why.mode')),
-    templateDir: gitConfig(repo, 'why.templateDir') ?? 'docs/decisions.md'
+    templateDir: gitConfig(repo, 'why.templateDir') ?? 'docs/decisions',
   };
 }
 
