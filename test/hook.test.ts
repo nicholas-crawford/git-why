@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
+import { existsSync, readFileSync, appendFileSync, mkdirSync, mkdtempSync, writeFileSync, chmodSync, symlinkSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { beforeEach, describe, test } from 'node:test';
-import { commit, git, globalConfig, tempRepo } from './helpers.ts';
+import { commit, git, globalConfig, sandbox, tempRepo } from './helpers.ts';
 import { stateDir } from '../src/config.ts';
 import { dequeue, listQueue } from '../src/queue.ts';
 
@@ -77,5 +78,19 @@ describe('post-commit hook', () => {
     const stderr = commit(repo, { 'a.ts': '1\n' }, 'Add a', env);
     assert.doesNotMatch(stderr, /git-why/);
     assert.deepEqual(listQueue(), []);
+  });
+
+  test('template mode with no claude on PATH still queues (WHY_FORCE_QUEUE skips the claude check itself)', () => {
+    const bin = mkdtempSync(join(sandbox, 'bin-'));
+    symlinkSync(execFileSync('which', ['git'], { encoding: 'utf8' }).trim(), join(bin, 'git'));
+    symlinkSync(process.execPath, join(bin, 'node'));
+    const path = [bin, '/bin', '/usr/bin'].join(':');
+    assert.throws(() => execFileSync('/bin/sh', ['-c', 'command -v claude'], { env: { PATH: path } }));
+
+    const repo = tempRepo();
+    git(repo, ['config', 'why.mode', 'template']);
+    const stderr = commit(repo, { 'a.ts': '1\n' }, 'Add a', { ...env, PATH: path });
+    assert.match(stderr, /git-why: queued [0-9a-f]{7}/);
+    assert.deepEqual(listQueue().map((item) => item.sha), [head(repo)]);
   });
 });

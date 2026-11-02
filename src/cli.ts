@@ -10,6 +10,7 @@ import { commitExists, diffForPrompt, readCommit, toplevel } from './git.ts';
 import type { Commit } from './git.ts';
 import { choose } from './keys.ts';
 import { dequeue, enqueue, listQueue } from './queue.ts';
+import { createTemplate, templateExists, templatePath } from './template.ts';
 
 const USAGE = `usage:
   git why           interview this repo's queued commits, oldest first
@@ -49,29 +50,57 @@ function firstMessage(commit: Commit, config: Config): string {
     commit.message,
     '',
     'Diffstat and diff (lockfiles excluded, may be truncated):',
-    diffForPrompt(commit, config.repoLog),
+    diffForPrompt(commit, config.repoLog, config.templateDir),
     '',
     'Ask your first question.',
   ].join('\n');
 }
 
-async function interview(commit: Commit, config: Config, source: Source): Promise<Outcome> {
-  const skipped = (msg: string): Outcome => {
-    dequeue(commit.sha);
-    say(msg);
-    return 'skipped';
-  };
-  const later = (msg: string): Outcome => {
-    enqueue(commit.toplevel, commit.sha);
-    say(`${msg}; ${commit.short} is queued (run: git why)`);
-    return 'queued';
-  };
+const skipped = (commit: Commit, msg: string): Outcome => {
+  dequeue(commit.sha);
+  say(msg);
+  return 'skipped';
+};
+const later = (commit: Commit, msg: string): Outcome => {
+  enqueue(commit.toplevel, commit.sha);
+  say(`${msg}; ${commit.short} is queued (run: git why)`);
+  return 'queued';
+};
 
-  if (source !== 'rev') {
-    if (alreadyLogged(config.centralLog, commit.sha)) return skipped(`${commit.short} is already in the central log`);
-    const verdict = classify({ ...commit, repoLog: config.repoLog, ignore: config.ignore });
-    if (verdict.trivial) return skipped(`skipped ${commit.short}: ${verdict.reason} (git why ${commit.short} to force)`);
+async function template(commit: Commit, config: Config, source: Source): Promise<Outcome> {
+  const { rel } = templatePath(commit, config.templateDir);
+  if (templateExists(commit, config.templateDir)) return skipped(commit, `${rel} already exists; left it alone`);
+
+  const start = await choose(
+    `\nDecision template for ${commit.repoName} ${commit.short} "${commit.subject}"?\n` +
+      `[Enter] create · [s] skip${source === 'drain' ? ' · [q] stop' : ''}`,
+    {
+      keys: { enter: 'create', s: 'skip', ...(source === 'drain' ? { q: 'quit' } : {}) } as const,
+      cancel: source === 'drain' ? 'quit' : 'later',
+      timeout: source === 'hook' ? { ms: HOOK_MENU_TIMEOUT_MS, choice: 'later' } : undefined,
+    },
+  );
+  if (start === 'quit') return 'quit';
+  if (start === 'skip') return skipped(commit, `skipped ${commit.short}`);
+  if (start === 'later') return later(commit, 'postponed');
+
+  if (createTemplate(commit, config.templateDir) === 'exists') {
+    return skipped(commit, `${rel} already exists; left it alone`);
   }
+  dequeue(commit.sha);
+  say(`created ${rel} (fill it in and commit it)`);
+  return 'saved';
+}
+
+async function interview(commit: Commit, config: Config, source: Source): Promise<Outcome> {
+  if (source !== 'rev') {
+    if (config.mode === 'interview' && alreadyLogged(config.centralLog, commit.sha)) {
+      return skipped(commit, `${commit.short} is already in the central log`);
+    }
+    const verdict = classify({ ...commit, repoLog: config.repoLog, templateDir: config.templateDir, ignore: config.ignore });
+    if (verdict.trivial) return skipped(commit, `skipped ${commit.short}: ${verdict.reason} (git why ${commit.short} to force)`);
+  }
+  if (config.mode === 'template') return template(commit, config, source);
 
   const start = await choose(
     `\nDecision interview for ${commit.repoName} ${commit.short} "${commit.subject}"?\n` +
@@ -83,8 +112,8 @@ async function interview(commit: Commit, config: Config, source: Source): Promis
     },
   );
   if (start === 'quit') return 'quit';
-  if (start === 'skip') return skipped(`skipped ${commit.short}`);
-  if (start === 'later') return later('postponed');
+  if (start === 'skip') return skipped(commit, `skipped ${commit.short}`);
+  if (start === 'later') return later(commit, 'postponed');
 
   // A neutral cwd keeps the repo's CLAUDE.md and settings out of the session.
   const cwd = join(stateDir(), 'sessions');
@@ -96,23 +125,23 @@ async function interview(commit: Commit, config: Config, source: Source): Promis
     systemPrompt: asset('prompts/interview.md').replaceAll('{{maxQuestions}}', String(config.maxQuestions)),
     firstMessage: firstMessage(commit, config),
   });
-  if (!run.ok) return later(`couldn't start claude (${run.error})`);
-  if (run.status !== 0) return later(`claude exited with status ${run.status}`);
+  if (!run.ok) return later(commit, `couldn't start claude (${run.error})`);
+  if (run.status !== 0) return later(commit, `claude exited with status ${run.status}`);
 
   const after = await choose('\n[Enter] save · [l] later · [s] skip', {
     keys: { enter: 'save', l: 'later', s: 'skip' } as const,
     cancel: 'later',
   });
-  if (after === 'skip') return skipped(`skipped ${commit.short}`);
-  if (after === 'later') return later('postponed');
+  if (after === 'skip') return skipped(commit, `skipped ${commit.short}`);
+  if (after === 'later') return later(commit, 'postponed');
 
   say('writing up your answers…');
   const result = extract({ ...session, schema: asset('schema/entry.json'), prompt: asset('prompts/extract.md') });
-  if (!result.ok) return later(`write-up failed (${result.error})`);
+  if (!result.ok) return later(commit, `write-up failed (${result.error})`);
   const decisions = parseDecisions(result.output);
-  if (!decisions) return later('write-up came back in an unexpected shape');
+  if (!decisions) return later(commit, 'write-up came back in an unexpected shape');
   const kept = keptDecisions(decisions);
-  if (kept.length === 0) return skipped('no reasons given, so there is nothing to record');
+  if (kept.length === 0) return skipped(commit, 'no reasons given, so there is nothing to record');
 
   const entry = formatEntry(
     { date: commit.date, repo: commit.repoName, sha: commit.sha, short: commit.short, subject: commit.subject },
@@ -123,8 +152,8 @@ async function interview(commit: Commit, config: Config, source: Source): Promis
     keys: { enter: 'write', d: 'discard', l: 'later' } as const,
     cancel: 'later',
   });
-  if (confirm === 'discard') return skipped(`discarded ${commit.short}`);
-  if (confirm === 'later') return later('postponed');
+  if (confirm === 'discard') return skipped(commit, `discarded ${commit.short}`);
+  if (confirm === 'later') return later(commit, 'postponed');
 
   const repoLog = join(commit.toplevel, config.repoLog);
   appendEntry(repoLog, entry, 'Decisions');
