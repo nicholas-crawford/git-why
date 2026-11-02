@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { formatEntry, keptDecisions, parseDecisions } from '../src/entry.ts';
+import { formatEntry, formatTemplate, keptDecisions, parseDecisions } from '../src/entry.ts';
 import type { Decision } from '../src/entry.ts';
 
 const meta = { date: '2026-10-28', repo: 'shop', sha: 'a'.repeat(40), short: 'aaaaaaa', subject: 'Native select on mobile' };
@@ -36,6 +36,29 @@ describe('formatEntry', () => {
     const out = formatEntry(meta, [{ ...full, rejected: null, tradeoff: '  ', tags: [] }]);
     assert.doesNotMatch(out, /Rejected|Tradeoff|Tags/);
     assert.match(out, /Why: screen reader/);
+  });
+});
+
+describe('formatTemplate', () => {
+  const out = formatTemplate(meta);
+
+  test('starts with the same header as a real entry', () => {
+    assert.ok(out.startsWith(formatEntry(meta, [])), out);
+  });
+
+  test('carries the full sha marker, so the commit can be found from the file', () => {
+    assert.ok(out.includes(`<!-- git-why ${'a'.repeat(40)} -->`));
+  });
+
+  test('has every field label, in the same order as a real entry', () => {
+    const labels = ['- Decision:', '  - Why:', '  - Rejected:', '  - Tradeoff:', '  - Tags:'];
+    const positions = labels.map((label) => out.indexOf(label));
+    assert.ok(positions.every((p) => p !== -1), `missing a label in:\n${out}`);
+    assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
+  });
+
+  test('ends with a single newline', () => {
+    assert.ok(out.endsWith('\n') && !out.endsWith('\n\n'));
   });
 });
 

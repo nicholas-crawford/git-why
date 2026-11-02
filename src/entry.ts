@@ -37,20 +37,19 @@ export function parseDecisions(raw: unknown): Decision[] | null {
 }
 
 const blank = (s: string | null): boolean => s === null || s.trim() === '';
+const enterHeader = (meta: EntryMeta): string[] => [`## ${meta.date} · ${meta.repo} · ${meta.short}`,
+  `<!-- git-why ${meta.sha} -->`,
+  meta.subject, '']
 
 /** A decision with no why, rejected option or tradeoff is just a description of the diff, so it's dropped. */
 export function keptDecisions(decisions: Decision[]): Decision[] {
   return decisions.filter((d) => !blank(d.decision) && !(blank(d.why) && blank(d.rejected) && blank(d.tradeoff)));
 }
 
-
 export function formatEntry(meta: EntryMeta, decisions: Decision[]): string {
   const lines = [
-    `## ${meta.date} · ${meta.repo} · ${meta.short}`,
-    `<!-- git-why ${meta.sha} -->`,
-    meta.subject,
-    '',
-  ];
+      ...enterHeader(meta),
+  ]
   for (const d of decisions) {
     lines.push(`- Decision: ${d.decision.trim()}`);
     if (!blank(d.why)) lines.push(`  - Why: ${d.why!.trim()}`);
@@ -59,4 +58,16 @@ export function formatEntry(meta: EntryMeta, decisions: Decision[]): string {
     if (d.tags.length > 0) lines.push(`  - Tags: ${d.tags.join(', ')}`);
   }
   return lines.join('\n') + '\n';
+}
+
+export function formatTemplate(meta: EntryMeta): string {
+  return [
+    ...enterHeader(meta),
+    '<!-- Fill this in and commit it. Copy the Decision block for each extra decision, and delete any line you leave empty. -->',
+    '- Decision:',
+    '  - Why:',
+    '  - Rejected:',
+    '  - Tradeoff:',
+    '  - Tags:',
+  ].join('\n') + '\n';
 }
