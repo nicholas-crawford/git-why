@@ -23,7 +23,7 @@ describe('readCommit', () => {
     const c = readCommit(repo, 'HEAD');
     assert.ok(c);
     assert.equal(c.whitespaceOnly, true);
-    assert.equal(classify({ ...c, repoLog: 'docs/decisions.md', ignore: [] }).trivial, true);
+    assert.equal(classify({ ...c, repoLog: 'docs/decisions.md', templateDir: 'docs/decisions', ignore: [] }).trivial, true);
   });
 
   test('a pure rename is not whitespace-only', () => {
@@ -54,8 +54,28 @@ describe('diffForPrompt', () => {
     );
     const c = readCommit(repo, 'HEAD');
     assert.ok(c);
-    const diff = diffForPrompt(c, 'docs/decisions.md');
+    const diff = diffForPrompt(c, 'docs/decisions.md', 'docs/decisions');
     assert.match(diff, /src\.ts/);
     assert.doesNotMatch(diff, /package-lock\.json|decisions\.md/);
+  });
+
+  test('leaves out decision templates, including nested ones, but not prefix siblings', () => {
+    const repo = tempRepo();
+    commit(
+      repo,
+      {
+        'src.ts': 'export {};\n',
+        'docs/decisions/2026-11-02-a1b2c3d.md': '## template\n',
+        'docs/decisions/2025/old.md': '## older\n',
+        'docs/decisions-old.md': '## sibling\n',
+      },
+      'Add things',
+    );
+    const c = readCommit(repo, 'HEAD');
+    assert.ok(c);
+    const diff = diffForPrompt(c, 'docs/decisions.md', 'docs/decisions');
+    assert.match(diff, /src\.ts/);
+    assert.match(diff, /decisions-old\.md/);
+    assert.doesNotMatch(diff, /docs\/decisions\//);
   });
 });

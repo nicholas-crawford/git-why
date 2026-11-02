@@ -9,6 +9,7 @@ const base: ClassifyInput = {
   subject: 'Use native select on mobile',
   whitespaceOnly: false,
   repoLog: 'docs/decisions.md',
+  templateDir: 'docs/decisions',
   ignore: [],
 };
 
@@ -43,6 +44,28 @@ describe('classify', () => {
 
   test('a commit that only adds decisions-log entries is trivial', () => {
     assert.equal(classify({ ...base, files: [{ status: 'M', path: 'docs/decisions.md' }] }).trivial, true);
+  });
+
+  test('a commit that only touches decision templates is trivial, at any depth', () => {
+    assert.equal(classify({ ...base, files: [{ status: 'A', path: 'docs/decisions/2026-11-02-a1b2c3d.md' }] }).trivial, true);
+    assert.equal(classify({ ...base, files: [{ status: 'M', path: 'docs/decisions/2025/old.md' }] }).trivial, true);
+  });
+
+  test('a template alongside real code is not trivial', () => {
+    const files = [{ status: 'A', path: 'docs/decisions/foo.md' }, { status: 'M', path: 'src/app.ts' }];
+    assert.deepEqual(classify({ ...base, files }), { trivial: false });
+  });
+
+  test('a custom templateDir is respected, and the default one no longer is', () => {
+    const files = [{ status: 'A', path: 'adr/0001-use-sqlite.md' }];
+    assert.equal(classify({ ...base, files, templateDir: 'adr' }).trivial, true);
+    const atDefault = [{ status: 'A', path: 'docs/decisions/foo.md' }];
+    assert.deepEqual(classify({ ...base, files: atDefault, templateDir: 'adr' }), { trivial: false });
+  });
+
+  test('a sibling that only shares the prefix is not ignored', () => {
+    const files = [{ status: 'M', path: 'docs/decisions-old.md' }];
+    assert.deepEqual(classify({ ...base, files }), { trivial: false });
   });
 
   test('why.ignore globs are honoured', () => {

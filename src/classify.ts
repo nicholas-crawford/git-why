@@ -22,6 +22,8 @@ export interface ClassifyInput {
   whitespaceOnly: boolean;
   /** The in-repo decisions log, so a commit that only adds entries doesn't trigger another interview. */
   repoLog: string;
+  /** The template-mode directory, for the same reason: committing a filled-in template shouldn't prompt for another one. */
+  templateDir: string;
   /** Extra globs from `why.ignore`. */
   ignore: string[];
 }
@@ -33,6 +35,8 @@ function ignored(path: string, input: ClassifyInput): boolean {
     LOCKFILES.includes(basename(path)) ||
     HOUSEKEEPING.includes(basename(path)) ||
     path === input.repoLog ||
+    // A glob, not a prefix: `/**` reaches nested files, and the `/` keeps siblings like `docs/decisions-old.md` out.
+    matchesGlob(path, `${input.templateDir}/**`) ||
     input.ignore.some((glob) => matchesGlob(path, glob))
   );
 }
@@ -41,7 +45,7 @@ export function classify(input: ClassifyInput): Verdict {
   if (input.parents > 1) return { trivial: true, reason: 'merge commit' };
   if (input.files.length === 0) return { trivial: true, reason: 'no file changes' };
   if (input.files.every((f) => ignored(f.path, input))) {
-    return { trivial: true, reason: 'only lockfiles, housekeeping files (.gitignore etc.), the decisions log or ignored paths' };
+    return { trivial: true, reason: 'only lockfiles, housekeeping files (.gitignore etc.), the decisions log, decision templates or ignored paths' };
   }
   if (/^style(\([^)]*\))?!?:/i.test(input.subject)) return { trivial: true, reason: 'style: commit' };
   if (input.whitespaceOnly) return { trivial: true, reason: 'whitespace-only changes' };

@@ -49,9 +49,40 @@ describe('config', () => {
         git(repo, ['config', 'why.mode', 'intervi'])
         assert.throws(() => loadConfig(repo).mode, /got "intervi"/)
     });
-    test('incorrect directory for template should result in error', () => {
-        const repo = tempRepo();
-        git(repo, ['config', 'why.templateDir', './desw'])
-        assert.throws(() => loadConfig(repo).templateDir, /error/)
+    test('repoLog is normalised, so classify still recognises it', () => {
+        for (const [value, expected] of [
+            ['./docs/decisions.md', 'docs/decisions.md'],
+            ['docs//decisions.md', 'docs/decisions.md'],
+        ]) {
+            const repo = tempRepo();
+            git(repo, ['config', 'why.repoLog', value])
+            assert.equal(loadConfig(repo).repoLog, expected, `for "${value}"`)
+        }
+    })
+    test('repoLog outside the repo is an error', () => {
+        for (const value of ['', '/tmp/decisions.md', '../decisions.md']) {
+            const repo = tempRepo();
+            git(repo, ['config', 'why.repoLog', value])
+            assert.throws(() => loadConfig(repo), /why\.repoLog must be a file inside the repo/, `for "${value}"`)
+        }
+    })
+    test('templateDir is normalised to the repo-relative form git reports', () => {
+        for (const [value, expected] of [
+            ['./adr', 'adr'],
+            ['docs/decisions/', 'docs/decisions'],
+            ['docs//decisions', 'docs/decisions'],
+            ['docs/./decisions', 'docs/decisions'],
+        ]) {
+            const repo = tempRepo();
+            git(repo, ['config', 'why.templateDir', value])
+            assert.equal(loadConfig(repo).templateDir, expected, `for "${value}"`)
+        }
+    })
+    test('templateDir outside the repo, or the repo root itself, is an error', () => {
+        for (const value of ['', '.', './', '/tmp/decisions', '../decisions', 'docs/../../decisions']) {
+            const repo = tempRepo();
+            git(repo, ['config', 'why.templateDir', value])
+            assert.throws(() => loadConfig(repo), /why\.templateDir must be a directory inside the repo/, `for "${value}"`)
+        }
     })
 })

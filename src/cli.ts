@@ -49,7 +49,7 @@ function firstMessage(commit: Commit, config: Config): string {
     commit.message,
     '',
     'Diffstat and diff (lockfiles excluded, may be truncated):',
-    diffForPrompt(commit, config.repoLog),
+    diffForPrompt(commit, config.repoLog, config.templateDir),
     '',
     'Ask your first question.',
   ].join('\n');
@@ -69,7 +69,7 @@ async function interview(commit: Commit, config: Config, source: Source): Promis
 
   if (source !== 'rev') {
     if (alreadyLogged(config.centralLog, commit.sha)) return skipped(`${commit.short} is already in the central log`);
-    const verdict = classify({ ...commit, repoLog: config.repoLog, ignore: config.ignore });
+    const verdict = classify({ ...commit, repoLog: config.repoLog, templateDir: config.templateDir, ignore: config.ignore });
     if (verdict.trivial) return skipped(`skipped ${commit.short}: ${verdict.reason} (git why ${commit.short} to force)`);
   }
 

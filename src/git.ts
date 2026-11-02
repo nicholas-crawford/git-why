@@ -81,9 +81,13 @@ export function readCommit(repo: string, rev: string): Commit | null {
   };
 }
 
-/** Diffstat plus patch for the prompt, minus lockfiles and the decisions log, capped in length. */
-export function diffForPrompt(commit: Commit, repoLog: string): string {
-  const excludes = [...LOCKFILES.map((f) => `:(exclude,glob)**/${f}`), `:(exclude)${repoLog}`];
+/** Diffstat plus patch for the prompt, minus lockfiles, the decisions log and templates, capped in length. */
+export function diffForPrompt(commit: Commit, repoLog: string, templateDir: string): string {
+  const excludes = [
+    ...LOCKFILES.map((f) => `:(exclude,glob)**/${f}`),
+    `:(exclude)${repoLog}`,
+    `:(exclude)${templateDir}`,
+  ];
   const out = git(commit.toplevel, [
     'show', '--format=', '--stat', '--patch', '-M', '--root', commit.sha, '--', '.', ...excludes,
   ]);
