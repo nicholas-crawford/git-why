@@ -37,7 +37,7 @@ export function parseDecisions(raw: unknown): Decision[] | null {
 }
 
 const blank = (s: string | null): boolean => s === null || s.trim() === '';
-const enterHeader = (meta: EntryMeta): string[] => [`## ${meta.date} · ${meta.repo} · ${meta.short}`,
+const entryHeader = (meta: EntryMeta): string[] => [`## ${meta.date} · ${meta.repo} · ${meta.short}`,
   `<!-- git-why ${meta.sha} -->`,
   meta.subject, '']
 
@@ -48,7 +48,7 @@ export function keptDecisions(decisions: Decision[]): Decision[] {
 
 export function formatEntry(meta: EntryMeta, decisions: Decision[]): string {
   const lines = [
-      ...enterHeader(meta),
+      ...entryHeader(meta),
   ]
   for (const d of decisions) {
     lines.push(`- Decision: ${d.decision.trim()}`);
@@ -62,7 +62,7 @@ export function formatEntry(meta: EntryMeta, decisions: Decision[]): string {
 
 export function formatTemplate(meta: EntryMeta): string {
   return [
-    ...enterHeader(meta),
+    ...entryHeader(meta),
     '<!-- Fill this in and commit it. Copy the Decision block for each extra decision, and delete any line you leave empty. -->',
     '- Decision:',
     '  - Why:',
