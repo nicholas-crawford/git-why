@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { basename, dirname, join } from 'node:path';
 import { classify } from './classify.ts';
 import { extract, runInterview } from './claude.ts';
+import { parseArgs } from './args.ts';
 import { loadConfig, stateDir } from './config.ts';
 import type { Config } from './config.ts';
 import { formatEntry, keptDecisions, parseDecisions } from './entry.ts';
@@ -18,6 +19,9 @@ const USAGE = `usage:
   git why --list    show how many commits are queued per repo
   git why <rev>     interview one commit, even a trivial one
 
+  --template        write blank decision templates instead of interviewing (overrides why.mode)
+  --interview       interview, even if why.mode is template
+
 skip one commit:  WHY_SKIP=1 git commit ...`;
 
 const HOOK_MENU_TIMEOUT_MS = 20_000;
@@ -25,6 +29,11 @@ const HOOK_MENU_TIMEOUT_MS = 20_000;
 const ROOT = join(import.meta.dirname, '..');
 const asset = (path: string): string => readFileSync(join(ROOT, path), 'utf8');
 const say = (msg: string): void => console.log(`git-why: ${msg}`);
+
+function configFor(repo: string, mode: Config['mode'] | null): Config {
+  const config = loadConfig(repo);
+  return mode ? { ...config, mode } : config;
+}
 
 /** Where the interview came from: the post-commit hook, a queue drain, or `git why <rev>`. */
 type Source = 'hook' | 'drain' | 'rev';
@@ -170,7 +179,7 @@ async function hook(sha: string | undefined): Promise<number> {
   return 0;
 }
 
-async function drain(repo: string | null): Promise<number> {
+async function drain(repo: string | null, mode: Config['mode'] | null): Promise<number> {
   const items = listQueue().filter((item) => repo === null || item.repo === repo);
   if (items.length === 0) {
     say(repo ? 'nothing queued for this repo' : 'nothing queued');
@@ -184,7 +193,7 @@ async function drain(repo: string | null): Promise<number> {
       say(`dropped ${item.sha.slice(0, 7)}: the commit no longer exists (rebased or deleted)`);
       continue;
     }
-    if ((await interview(commit, loadConfig(commit.toplevel), 'drain')) === 'quit') {
+    if ((await interview(commit, configFor(commit.toplevel, mode), 'drain')) === 'quit') {
       say(`stopped; ${items.length - i} left in the queue`);
       break;
     }
@@ -200,18 +209,19 @@ function list(): number {
   return 0;
 }
 
-async function one(rev: string): Promise<number> {
+async function one(rev: string, mode: Config['mode'] | null): Promise<number> {
   const top = toplevel(process.cwd());
   const commit = top ? readCommit(top, rev) : null;
   if (!commit) {
     say(top ? `unknown commit: ${rev}` : 'not in a git repository');
     return 1;
   }
-  await interview(commit, loadConfig(commit.toplevel), 'rev');
+  await interview(commit, configFor(commit.toplevel, mode), 'rev');
   return 0;
 }
 
-async function main([cmd, ...rest]: string[]): Promise<number> {
+async function main(argv: string[]): Promise<number> {
+  const { mode, args: [cmd, ...rest] } = parseArgs(argv);
   if (cmd === '-h' || cmd === '--help') {
     console.log(USAGE);
     return 0;
@@ -222,20 +232,20 @@ async function main([cmd, ...rest]: string[]): Promise<number> {
     say('the interview needs an interactive terminal');
     return 1;
   }
-  if (cmd === '--all') return drain(null);
+  if (cmd === '--all') return drain(null, mode);
   if (cmd === undefined) {
     const top = toplevel(process.cwd());
     if (!top) {
       say('not in a git repository (try git why --all or --list)');
       return 1;
     }
-    return drain(top);
+    return drain(top, mode);
   }
   if (cmd.startsWith('-')) {
     console.error(USAGE);
     return 1;
   }
-  return one(cmd);
+  return one(cmd, mode);
 }
 
 main(process.argv.slice(2)).then(
