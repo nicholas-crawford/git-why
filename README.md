@@ -20,7 +20,7 @@ Only reasons you actually gave are recorded. The interviewer is told not to sugg
 
 - git with config-based hooks (`hook.<name>.command`). Apple git 2.54 and Homebrew git 2.55 both have them; `install.sh` checks.
 - Node 22.18+ (runs the TypeScript source directly, no build step).
-- [Claude Code](https://claude.com/claude-code), logged in. Interviews use your normal Claude Code login.
+- [Claude Code](https://claude.com/claude-code), logged in. (Optional if you're using [template mode](#template-mode))
 
 ## Install
 
@@ -57,6 +57,9 @@ git why            # interview this repo's queued commits, oldest first
 git why --all      # every repo
 git why --list     # counts per repo
 git why <rev>      # interview any commit, even a trivial one
+git why --template # flag for template mode
+git why --interview # flag for interview mode
+
 ```
 
 The queue is a spool directory, one file per commit, in `~/.local/state/git-why/queue/`. Commits that were rebased away are dropped when you drain.
@@ -68,6 +71,47 @@ The queue is a spool directory, one file per commit, in `~/.local/state/git-why/
 - Always queue, never interview at commit time: `export WHY_FORCE_QUEUE=1`
 - Turn it off for one repo: `git config hook.git-why.enabled false`
 
+## Template mode
+
+Instead of an interview, git-why can write a blank decision file into the repo for you to fill in yourself. It doesn't use Claude, so it works without Claude Code installed.
+
+```sh
+git config why.mode template            # this repo
+git config --global why.mode template   # every repo
+git why --template                      # just once, this repo's queue
+git why --template a1b2c3d              # just once, one commit
+```
+
+`--template` works with `git why`, `--all` and `<rev>`, and overrides `why.mode` for that run. `--interview` does the opposite, for when `why.mode` is `template`.
+
+After that, everything works as above:
+
+```
+Decision template for shop a1b2c3d "Use native select on mobile"?
+[Enter] create · [s] skip
+```
+
+Enter writes `docs/decisions/2026-10-28-a1b2c3d.md`:
+
+```md
+## 2026-10-28 · shop · a1b2c3d
+<!-- git-why a1b2c3d… -->
+Use native select on mobile
+
+<!-- Fill this in and commit it. Copy the Decision block for each extra decision, and delete any line you leave empty. -->
+- Decision:
+  - Why:
+  - Rejected:
+  - Tradeoff:
+  - Tags:
+```
+
+Fill it in and commit it. Files in the template directory count as trivial changes, so that commit doesn't ask for another template. If the file already exists, git-why leaves it alone.
+
+With no key pressed for 20 seconds, the commit is queued. While the mode is set, `git why` and `git why <rev>` create templates instead of starting interviews.
+
+Templates stay in the repo. Only interviews write to the in-repo log and the central log.
+
 ## Configuration
 
 Plain git config: set globally with `--global`, override per repo without it.
@@ -78,6 +122,8 @@ Plain git config: set globally with `--global`, override per repo without it.
 | `why.repoLog` | `docs/decisions.md` | in-repo log, relative to the repo root |
 | `why.model` | `sonnet` | any `claude --model` value |
 | `why.maxQuestions` | `5` | |
+| `why.mode` | `interview` | `interview` or `template` |
+| `why.templateDir` | `docs/decisions` | where template mode writes its files, relative to the repo root |
 | `why.ignore` | (none) | extra paths that don't count as real changes; repeat for several globs, e.g. `git config --global --add why.ignore 'generated/**'` |
 
 The in-repo log is meant to be committed. An entry is written after its commit, so it goes in with your next one. Commits that only touch the log don't trigger an interview.
